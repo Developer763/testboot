@@ -32,7 +32,7 @@ admins = load_data(ADMINS_FILE)
 banned = load_data(BANNED_FILE)
 muted = load_data(MUTED_FILE)
 
-OWNER_ID = 123456789  # <-- замени на свой Telegram ID
+OWNER_ID = 7294123971  # <-- замени на свой Telegram ID
 
 # Проверка админских прав
 def is_admin(user_id):
