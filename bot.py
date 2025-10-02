@@ -20,7 +20,7 @@ MUTED_FILE = "muted.json"
 CHATS_FILE = "chats.json"
 
 ROLES = ["Стажер", "Модератор", "Старший модератор", "Заместитель", "Владелец"]
-OWNER_ID = 123456789  # <-- замени на свой Telegram ID
+OWNER_ID = 7294123971  # <-- замени на свой Telegram ID
 
 # --- Служебные функции ---
 def load_data(filename):
