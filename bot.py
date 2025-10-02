@@ -17,9 +17,10 @@ dp = Dispatcher()
 ADMINS_FILE = "admins.json"
 BANNED_FILE = "banned.json"
 MUTED_FILE = "muted.json"
+CHATS_FILE = "chats.json"
 
 ROLES = ["Стажер", "Модератор", "Старший модератор", "Заместитель", "Владелец"]
-OWNER_ID = 7294123971  # <-- замени на свой Telegram ID
+OWNER_ID = 123456789  # <-- замени на свой Telegram ID
 
 # --- Служебные функции ---
 def load_data(filename):
@@ -35,6 +36,7 @@ def save_data(filename, data):
 admins = load_data(ADMINS_FILE)
 banned = load_data(BANNED_FILE)
 muted = load_data(MUTED_FILE)
+chats = load_data(CHATS_FILE)
 
 def get_role(user_id):
     if str(user_id) == str(OWNER_ID):
@@ -55,7 +57,7 @@ def has_permission(user_id, required_role):
 # --- START ---
 @dp.message(Command("start"))
 async def start_handler(message: Message):
-    await message.answer("Привет! Я бот для модерации. Команды: /setadm, /nahuisadm, /ban, /unban, /mute, /unmute, /admins")
+    await message.answer("Привет! Я бот для модерации. Команды: /setadm, /nahuisadm, /ban, /unban, /mute, /unmute, /admins, /chats")
 
 # --- SET ADM ---
 @dp.message(Command("setadm"))
@@ -70,7 +72,7 @@ async def setadm_handler(message: Message):
     username = args[1].lstrip("@")
     role = args[2]
 
-    if role not in ROLES:
+    if role not in ROLES or role == "Владелец":
         return await message.answer("⚠️ Доступные роли: Стажер, Модератор, Старший модератор, Заместитель")
 
     admins[username] = {"id": message.from_user.id, "role": role}
@@ -166,6 +168,28 @@ async def unmute_handler(message: Message):
         await message.answer(f"✅ @{username} размьючен.")
     else:
         await message.answer("⚠️ Этот пользователь не в муте.")
+
+# --- TRACK CHATS ---
+@dp.message()
+async def track_chats(message: Message):
+    chat_id = message.chat.id
+    chat_title = message.chat.title or message.chat.full_name or str(chat_id)
+
+    if str(chat_id) not in chats:
+        chats[str(chat_id)] = chat_title
+        save_data(CHATS_FILE, chats)
+
+# --- CHATS LIST ---
+@dp.message(Command("chats"))
+async def chats_handler(message: Message):
+    if not has_permission(message.from_user.id, "Заместитель"):
+        return await message.answer("❌ У вас нет прав смотреть список чатов.")
+
+    if not chats:
+        return await message.answer("📭 Бот пока ни в одном чате не замечен.")
+
+    chat_list = "\n".join([f"{title} (`{chat_id}`)" for chat_id, title in chats.items()])
+    await message.answer(f"📋 Чаты, где есть бот:\n{chat_list}", parse_mode="Markdown")
 
 # --- MAIN ---
 async def main():
