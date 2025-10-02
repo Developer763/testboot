@@ -19,22 +19,32 @@ BANNED_FILE = "banned.json"
 MUTED_FILE = "muted.json"
 
 ROLES = ["Стажер", "Модератор", "Старший модератор", "Заместитель", "Владелец"]
-OWNER_ID = 7294123971  # <-- замени на свой Telegram ID
+OWNER_ID = 7294123971  # <-- твой Telegram ID
 
 # --- Служебные функции ---
-def load_data(filename):
-    if os.path.exists(filename):
-        with open(filename, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+def load_data(filename, default=None):
+    if not os.path.exists(filename):
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(default if default is not None else {}, f, ensure_ascii=False, indent=4)
+        return default if default is not None else {}
+    with open(filename, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def save_data(filename, data):
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-admins = load_data(ADMINS_FILE)
-banned = load_data(BANNED_FILE)
-muted = load_data(MUTED_FILE)
+# --- Автозагрузка владельца ---
+admins = load_data(ADMINS_FILE, {})
+if not admins:  # если файл пустой — создаём владельца
+    admins["owner"] = {
+        "id": OWNER_ID,
+        "role": "Владелец"
+    }
+    save_data(ADMINS_FILE, admins)
+
+banned = load_data(BANNED_FILE, {})
+muted = load_data(MUTED_FILE, {})
 
 def get_role(user_id):
     if str(user_id) == str(OWNER_ID):
