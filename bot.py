@@ -70,7 +70,7 @@ async def setadm_handler(message: Message):
     username = args[1].lstrip("@")
     role = args[2]
 
-    if role not in ROLES or role == "Владелец":
+    if role not in ROLES:
         return await message.answer("⚠️ Доступные роли: Стажер, Модератор, Старший модератор, Заместитель")
 
     admins[username] = {"id": message.from_user.id, "role": role}
