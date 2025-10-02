@@ -18,6 +18,10 @@ ADMINS_FILE = "admins.json"
 BANNED_FILE = "banned.json"
 MUTED_FILE = "muted.json"
 
+ROLES = ["Стажер", "Модератор", "Старший модератор", "Заместитель", "Владелец"]
+OWNER_ID = 123456789  # <-- замени на свой Telegram ID
+
+# --- Служебные функции ---
 def load_data(filename):
     if os.path.exists(filename):
         with open(filename, "r", encoding="utf-8") as f:
@@ -32,11 +36,21 @@ admins = load_data(ADMINS_FILE)
 banned = load_data(BANNED_FILE)
 muted = load_data(MUTED_FILE)
 
-OWNER_ID = 7294123971  # <-- замени на свой Telegram ID
+def get_role(user_id):
+    if str(user_id) == str(OWNER_ID):
+        return "Владелец"
+    for username, info in admins.items():
+        if str(info["id"]) == str(user_id):
+            return info["role"]
+    return None
 
-# Проверка админских прав
-def is_admin(user_id):
-    return str(user_id) == str(OWNER_ID) or str(user_id) in admins.values()
+def has_permission(user_id, required_role):
+    user_role = get_role(user_id)
+    if user_role == "Владелец":
+        return True
+    if user_role is None:
+        return False
+    return ROLES.index(user_role) >= ROLES.index(required_role)
 
 # --- START ---
 @dp.message(Command("start"))
@@ -46,29 +60,39 @@ async def start_handler(message: Message):
 # --- SET ADM ---
 @dp.message(Command("setadm"))
 async def setadm_handler(message: Message):
-    if message.from_user.id != OWNER_ID:
-        return await message.answer("❌ Только владелец может назначать админов.")
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await message.answer("⚠️ Использование: /setadm @username")
+    if str(message.from_user.id) != str(OWNER_ID) and not has_permission(message.from_user.id, "Заместитель"):
+        return await message.answer("❌ У вас нет прав назначать админов.")
+
+    args = message.text.split()
+    if len(args) < 3:
+        return await message.answer("⚠️ Использование: /setadm @username Роль")
+
     username = args[1].lstrip("@")
-    admins[username] = str(message.from_user.id)
+    role = args[2]
+
+    if role not in ROLES or role == "Владелец":
+        return await message.answer("⚠️ Доступные роли: Стажер, Модератор, Старший модератор, Заместитель")
+
+    admins[username] = {"id": message.from_user.id, "role": role}
     save_data(ADMINS_FILE, admins)
-    await message.answer(f"✅ @{username} теперь администратор.")
+    await message.answer(f"✅ @{username} назначен как {role}.")
 
 # --- REMOVE ADM ---
 @dp.message(Command("nahuisadm"))
 async def nahuisadm_handler(message: Message):
-    if message.from_user.id != OWNER_ID:
-        return await message.answer("❌ Только владелец может снимать админов.")
-    args = message.text.split(maxsplit=1)
+    if str(message.from_user.id) != str(OWNER_ID) and not has_permission(message.from_user.id, "Заместитель"):
+        return await message.answer("❌ У вас нет прав снимать админов.")
+
+    args = message.text.split()
     if len(args) < 2:
         return await message.answer("⚠️ Использование: /nahuisadm @username")
+
     username = args[1].lstrip("@")
     if username in admins:
+        role = admins[username]["role"]
         del admins[username]
         save_data(ADMINS_FILE, admins)
-        await message.answer(f"❌ @{username} снят с админов.")
+        await message.answer(f"❌ @{username} снят с должности {role}.")
     else:
         await message.answer("⚠️ Такого админа нет.")
 
@@ -77,15 +101,15 @@ async def nahuisadm_handler(message: Message):
 async def admins_handler(message: Message):
     if not admins:
         return await message.answer("👤 Администраторов пока нет.")
-    admin_list = "\n".join([f"@{u}" for u in admins.keys()])
-    await message.answer(f"📋 Администраторы:\n{admin_list}")
+    admin_list = "\n".join([f"@{u} — {info['role']}" for u, info in admins.items()])
+    await message.answer(f"📋 Администраторы:\n{admin_list}\n\n👑 Владелец всегда имеет полный доступ.")
 
 # --- BAN ---
 @dp.message(Command("ban"))
 async def ban_handler(message: Message):
-    if not is_admin(message.from_user.id):
-        return await message.answer("❌ У вас нет прав.")
-    args = message.text.split(maxsplit=1)
+    if not has_permission(message.from_user.id, "Модератор"):
+        return await message.answer("❌ У вас нет прав банить.")
+    args = message.text.split()
     if len(args) < 2:
         return await message.answer("⚠️ Использование: /ban @username")
     username = args[1].lstrip("@")
@@ -96,9 +120,9 @@ async def ban_handler(message: Message):
 # --- UNBAN ---
 @dp.message(Command("unban"))
 async def unban_handler(message: Message):
-    if not is_admin(message.from_user.id):
-        return await message.answer("❌ У вас нет прав.")
-    args = message.text.split(maxsplit=1)
+    if not has_permission(message.from_user.id, "Старший модератор"):
+        return await message.answer("❌ У вас нет прав разбанивать.")
+    args = message.text.split()
     if len(args) < 2:
         return await message.answer("⚠️ Использование: /unban @username")
     username = args[1].lstrip("@")
@@ -112,9 +136,9 @@ async def unban_handler(message: Message):
 # --- MUTE ---
 @dp.message(Command("mute"))
 async def mute_handler(message: Message):
-    if not is_admin(message.from_user.id):
-        return await message.answer("❌ У вас нет прав.")
-    args = message.text.split(maxsplit=2)
+    if not has_permission(message.from_user.id, "Стажер"):
+        return await message.answer("❌ У вас нет прав мутить.")
+    args = message.text.split()
     if len(args) < 3:
         return await message.answer("⚠️ Использование: /mute @username 10")
     username = args[1].lstrip("@")
@@ -130,9 +154,9 @@ async def mute_handler(message: Message):
 # --- UNMUTE ---
 @dp.message(Command("unmute"))
 async def unmute_handler(message: Message):
-    if not is_admin(message.from_user.id):
-        return await message.answer("❌ У вас нет прав.")
-    args = message.text.split(maxsplit=1)
+    if not has_permission(message.from_user.id, "Стажер"):
+        return await message.answer("❌ У вас нет прав размьючивать.")
+    args = message.text.split()
     if len(args) < 2:
         return await message.answer("⚠️ Использование: /unmute @username")
     username = args[1].lstrip("@")
