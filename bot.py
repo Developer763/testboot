@@ -1,31 +1,18 @@
-import asyncio
-import logging
 import os
 import json
-from datetime import datetime, timedelta
+import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from aiogram.filters import Command
 
-logging.basicConfig(level=logging.INFO)
+API_TOKEN = os.getenv("BOT_TOKEN")
 
-TOKEN = os.getenv("BOT_TOKEN")
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
-
-# Файлы
 ADMINS_FILE = "admins.json"
 BANNED_FILE = "banned.json"
 MUTED_FILE = "muted.json"
 
-ROLES = ["Стажер", "Модератор", "Старший модератор", "Заместитель", "Владелец"]
-OWNER_ID = 7294123971  # <-- твой Telegram ID
-
-# --- Служебные функции ---
 def load_data(filename, default=None):
     if not os.path.exists(filename):
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(default if default is not None else {}, f, ensure_ascii=False, indent=4)
         return default if default is not None else {}
     with open(filename, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -34,150 +21,28 @@ def save_data(filename, data):
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-# --- Автозагрузка владельца ---
 admins = load_data(ADMINS_FILE, {})
-if not admins:  # если файл пустой — создаём владельца
-    admins["owner"] = {
-        "id": OWNER_ID,
-        "role": "Владелец"
-    }
-    save_data(ADMINS_FILE, admins)
-
 banned = load_data(BANNED_FILE, {})
 muted = load_data(MUTED_FILE, {})
 
-def get_role(user_id):
-    if str(user_id) == str(OWNER_ID):
-        return "Владелец"
-    for username, info in admins.items():
-        if str(info["id"]) == str(user_id):
-            return info["role"]
+ROLES = ["Стажер", "Модератор", "Старший модератор", "Заместитель", "Владелец"]
+
+def get_role(user_id: int):
+    for adm in admins.values():
+        if adm["id"] == user_id:
+            return adm["role"]
     return None
 
-def has_permission(user_id, required_role):
-    user_role = get_role(user_id)
-    if user_role == "Владелец":
-        return True
-    if user_role is None:
-        return False
-    return ROLES.index(user_role) >= ROLES.index(required_role)
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher()
 
-# --- START ---
-@dp.message(Command("start"))
-async def start_handler(message: Message):
-    await message.answer("Привет! Я бот для модерации. Команды: /setadm, /nahuisadm, /ban, /unban, /mute, /unmute, /admins")
-
-# --- SET ADM ---
-@dp.message(Command("setadm"))
-async def setadm_handler(message: Message):
-    if str(message.from_user.id) != str(OWNER_ID) and not has_permission(message.from_user.id, "Заместитель"):
-        return await message.answer("❌ У вас нет прав назначать админов.")
-
-    args = message.text.split()
-    if len(args) < 3:
-        return await message.answer("⚠️ Использование: /setadm @username Роль")
-
-    username = args[1].lstrip("@")
-    role = args[2]
-
-    if role not in ROLES or role == "Владелец":
-        return await message.answer("⚠️ Доступные роли: Стажер, Модератор, Старший модератор, Заместитель")
-
-    admins[username] = {"id": message.from_user.id, "role": role}
-    save_data(ADMINS_FILE, admins)
-    await message.answer(f"✅ @{username} назначен как {role}.")
-
-# --- REMOVE ADM ---
-@dp.message(Command("nahuisadm"))
-async def nahuisadm_handler(message: Message):
-    if str(message.from_user.id) != str(OWNER_ID) and not has_permission(message.from_user.id, "Заместитель"):
-        return await message.answer("❌ У вас нет прав снимать админов.")
-
-    args = message.text.split()
-    if len(args) < 2:
-        return await message.answer("⚠️ Использование: /nahuisadm @username")
-
-    username = args[1].lstrip("@")
-    if username in admins:
-        role = admins[username]["role"]
-        del admins[username]
-        save_data(ADMINS_FILE, admins)
-        await message.answer(f"❌ @{username} снят с должности {role}.")
-    else:
-        await message.answer("⚠️ Такого админа нет.")
-
-# --- ADMINS LIST ---
 @dp.message(Command("admins"))
-async def admins_handler(message: Message):
-    if not admins:
-        return await message.answer("👤 Администраторов пока нет.")
-    admin_list = "\n".join([f"@{u} — {info['role']}" for u, info in admins.items()])
-    await message.answer(f"📋 Администраторы:\n{admin_list}\n\n👑 Владелец всегда имеет полный доступ.")
+async def list_admins(message: Message):
+    text = "👮 Администраторы:\n"
+    for adm in admins.values():
+        text += f'- {adm["id"]} ({adm["role"]})\n'
+    await message.answer(text)
 
-# --- BAN ---
-@dp.message(Command("ban"))
-async def ban_handler(message: Message):
-    if not has_permission(message.from_user.id, "Модератор"):
-        return await message.answer("❌ У вас нет прав банить.")
-    args = message.text.split()
-    if len(args) < 2:
-        return await message.answer("⚠️ Использование: /ban @username")
-    username = args[1].lstrip("@")
-    banned[username] = True
-    save_data(BANNED_FILE, banned)
-    await message.answer(f"⛔ @{username} забанен.")
-
-# --- UNBAN ---
-@dp.message(Command("unban"))
-async def unban_handler(message: Message):
-    if not has_permission(message.from_user.id, "Старший модератор"):
-        return await message.answer("❌ У вас нет прав разбанивать.")
-    args = message.text.split()
-    if len(args) < 2:
-        return await message.answer("⚠️ Использование: /unban @username")
-    username = args[1].lstrip("@")
-    if username in banned:
-        del banned[username]
-        save_data(BANNED_FILE, banned)
-        await message.answer(f"✅ @{username} разбанен.")
-    else:
-        await message.answer("⚠️ Этот пользователь не забанен.")
-
-# --- MUTE ---
-@dp.message(Command("mute"))
-async def mute_handler(message: Message):
-    if not has_permission(message.from_user.id, "Стажер"):
-        return await message.answer("❌ У вас нет прав мутить.")
-    args = message.text.split()
-    if len(args) < 3:
-        return await message.answer("⚠️ Использование: /mute @username 10")
-    username = args[1].lstrip("@")
-    try:
-        minutes = int(args[2])
-    except ValueError:
-        return await message.answer("⚠️ Время должно быть числом (в минутах).")
-    until = (datetime.now() + timedelta(minutes=minutes)).timestamp()
-    muted[username] = until
-    save_data(MUTED_FILE, muted)
-    await message.answer(f"🔇 @{username} замьючен на {minutes} минут.")
-
-# --- UNMUTE ---
-@dp.message(Command("unmute"))
-async def unmute_handler(message: Message):
-    if not has_permission(message.from_user.id, "Стажер"):
-        return await message.answer("❌ У вас нет прав размьючивать.")
-    args = message.text.split()
-    if len(args) < 2:
-        return await message.answer("⚠️ Использование: /unmute @username")
-    username = args[1].lstrip("@")
-    if username in muted:
-        del muted[username]
-        save_data(MUTED_FILE, muted)
-        await message.answer(f"✅ @{username} размьючен.")
-    else:
-        await message.answer("⚠️ Этот пользователь не в муте.")
-
-# --- MAIN ---
 async def main():
     await dp.start_polling(bot)
 
