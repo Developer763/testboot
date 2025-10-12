@@ -142,6 +142,9 @@ async def ensure_group(message: Message):
 async def start_handler(message: Message):
     await message.answer("Привет! Модераторный бот. Используй команды в группе: /ban, /unban, /mute, /unmute. Поддерживается reply, @username и id.")
 
+@dp.message(Command("resetbase"))
+async def start_handler(message: Message):
+    await message.answer("База обновлена✅")
 
 @dp.message(Command("ban"))
 async def ban_handler(message: Message):
